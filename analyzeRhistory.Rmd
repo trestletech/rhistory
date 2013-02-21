@@ -1,8 +1,11 @@
-Process Public .Rhistory Files
+Analysis of Public .Rhistory Files
 ========================================================
 
-Inspired by [Aldo Cortesi's post](http://corte.si/posts/hacks/github-shhistory/index.html) documenting his exploration of public shell history files posted to GitHub, I was curious if there were any such `.Rhistory` files. For the uninitiated, `.Rhistory` files 
+GitHub recently launched a more powerful search feature which has been used on more than one occasion to [identify sensitive files that may be hosted in a public GitHub repository](http://it.slashdot.org/story/13/01/25/132203/github-kills-search-after-hundreds-of-private-keys-exposed). When used innocently, there are all sorts of fun things you can find with this search feature.
 
+Inspired by [Aldo Cortesi's post](http://corte.si/posts/hacks/github-shhistory/index.html) documenting his exploration of public shell history files posted to GitHub, I was curious if there were any such `.Rhistory` files. For the uninitiated, `.Rhistory` files are just logs of commands entered into the interactive console during an R session. Some recent IDEs, such as RStudio, automatically create these files as you work. By default, these files would be excluded from a Git repository, but users could, for whatever reason, choose to include their `.Rhistory` files in the repository.
+
+Using this search function, combined with the [Python script](https://github.com/cortesi/ghrabber) Mr. Cortesi had put together to download the files associated with a GitHub search, I was able to download 638 `.Rhistory` files from public GitHub repositories (excluding forks). What follows is an exploration of those files.
 
 Load Data
 ---------
@@ -18,7 +21,7 @@ for (file in list.files("fetched")){
 files <- files[sapply(files, length) > 0]
 ```
 
-This leaves us with a total of `r length(files)` non-empty files, totalling `r sum(sapply(files, length))` commands entered into R.
+Trimming out the 0-line `.Rhistory` files leaves us with a total of `r length(files)` non-empty files, totaling `r sum(sapply(files, length))` commands entered into R.
 
 First, I was curious about the length of these files.
 
@@ -62,15 +65,15 @@ Package Name | Count
 ------------ | ------
 ```{r, echo=FALSE, results='asis'}
 topPkg <- head(sort(table(loaded), decreasing=TRUE),n=10)
-cat(paste(names(topPkg), as.integer(topPkg), collapse="\n", sep=" | "))
+cat(paste(paste("`", names(topPkg), "`", sep="") , as.integer(topPkg), collapse="\n", sep=" | "))
 ```
 
-(Of course it's likely worth noting the selection bias from examining only R commands which were included in GitHub projects. I would imagine that the usage for `devtools`, for instance, is certainly higher among GitHub projects.)
+(Of course it's likely worth noting the selection bias from examining only R commands which were included in GitHub projects. I would imagine that the usage for `devtools`, for instance, is certainly inflated among GitHub projects over the general populace.)
 
 Function Use
 ------------
 
-I'm also curious which functions were most widely executed. We can get a rough identification of most function names by looking for a sequence of valid characters followed by an `(` symbol.
+I was also curious which functions were most widely executed. We can get a rough identification of most function names by looking for a sequence of valid characters followed by an `(` symbol.
 
 ```{r, echo=FALSE, cache=TRUE}
 functions <- str_match_all(flatFile, "([[:alnum:]\\._]+)[[:space:]]*\\(")
@@ -78,17 +81,41 @@ functions <- functions[sapply(functions, length) > 0]
 functions <- as.character(sapply(functions, function(x){ return(x[,2]) } ))
 ```
 
-This gives us a total of `r length(functions)` function calls. The 10 most popular functions executed in this set were:
+This gives us a total of `r length(functions)` function calls of `r length(unique(functions))` unique function names. The 20 most popular functions executed in this set were:
 
 Function Name | Count
 ------------ | ------
 ```{r, echo=FALSE, results='asis'}
-topFun <- head(sort(table(functions), decreasing=TRUE),n=10)
-cat(paste(names(topFun), as.integer(topFun), collapse="\n", sep=" | "))
+topFun <- head(sort(table(functions), decreasing=TRUE),n=20)
+cat(paste(paste("`", names(topFun), "`", sep="") , as.integer(topFun), collapse="\n", sep=" | "))
 ```
 
+It should also be possible to identify for which functions the help/manual pages were viewed by identifying lines beginning with a "?" or arguments inside of a call to `help()`.
 
+```{r, echo=FALSE, cache=TRUE}
+help <- str_match_all(flatFile, "help\\(\"?([^,^\\^\")]+)\"?,?.*\\)")
+help <- help[sapply(help, length) > 0]
+help <- as.character(sapply(help, function(x){ return(x[,2]) } ))
+#remove calls for package-wide help
+help <- help[!grepl("package[[:space:]]?=", help)]
 
+ques <- str_match_all(flatFile, "^\\?[[:space:]]*([[:alnum:]\\._]+)" )
+ques <- ques[sapply(ques, length) > 0]
+ques <- as.character(sapply(ques, function(x){ return(x[,2]) } ))
 
+qs <- c(help, ques)
+```
 
+I can identify `r length(qs)` requests for help on `r length(unique(qs))` different function names. The top 10 most prevalent functions for which users request help follow.
 
+Function Name | Count
+------------ | ------
+```{r, echo=FALSE, results='asis'}
+topHelp <- head(sort(table(qs), decreasing=TRUE),n=10)
+cat(paste(paste("`", names(topHelp), "`", sep="") , as.integer(topHelp), collapse="\n", sep=" | "))
+```
+
+Conclusion
+----------
+
+Of course, there are all sorts of different types of analysis one could perform on this dataset. Post any suggestions you have in the comments; I imagine there's at least one more post of interesting finds in this data.
